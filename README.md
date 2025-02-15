@@ -6,7 +6,7 @@ A dynamic and interactive game where squares move, bounce, and interact with var
 **Features:**  
 - **Bouncing Squares Gameplay** – Squares move freely, bounce off walls, and interact with power-ups.  
 - **Custom Level Editor** – Create and save your own levels with an intuitive interface.  
-- **Power-Ups & Effects** – Includes teleporters, kill zones, and a finish area.  
+- **Power-Ups & Effects** – Includes teleporters, knife, and a finish area.  
 - **CSV-Based Levels** – Easily load and modify levels using CSV files.  
 - **Smooth Visuals & Audio** – Dynamic contrails, overlays, and background music.  
 
