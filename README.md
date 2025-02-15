@@ -1,7 +1,7 @@
 ### **Bouncing Squares Game & Level Editor**  
 
 **Description:**  
-A dynamic and interactive game where squares move, bounce, and interact with various power-ups. The project includes a level editor that allows users to design and customize levels with obstacles, teleporters, kill zones, and finish areas.  
+A visually pleasing game where squares move, bounce, and interact with various power-ups. The project includes a level editor that allows users to design and customize levels with obstacles, teleporters, knife (kills other squares), and finish areas.  
 
 **Features:**  
 - **Bouncing Squares Gameplay** – Squares move freely, bounce off walls, and interact with power-ups.  
