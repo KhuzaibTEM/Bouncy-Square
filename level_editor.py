@@ -16,9 +16,10 @@ BLUE = (0, 0, 255)
 RED = (200, 25, 25)
 YELLOW = (255, 255, 0)
 PURPLE = (128, 0, 128)
-# ...existing code...
 ORANGE = (255, 165, 0)
-SQUARE = (0, 255, 0)  # Color for the square
+
+
+SQUARE = (0, 255, 0)
 
 # Game variables
 ROWS = HEIGHT // TILE_SIZE
@@ -27,7 +28,7 @@ current_tile = 1  # Default tile to draw is an obstacle
 level = 1
 
 # Create an empty level grid
-world_data = [[-1 for _ in range(COLS)] for _ in range(ROWS)]
+world_data = [[-1 for i in range(COLS)] for i in range(ROWS)]
 
 # Screen setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
