@@ -2,8 +2,9 @@ import pygame
 import csv
 import sys
 import time
+import random
+import math
 
-# Initialize Pygame
 pygame.init()
 
 # Screen dimensions
@@ -21,6 +22,7 @@ WHITE = (255, 255, 255)
 
 # List of colors for squares
 SQUARE_COLORS = [RED, BLUE, YELLOW, PURPLE, ORANGE]
+Square_Color_Names = ["Red", "Blue", "Yellow", "Purple", "Orange"]
 
 # Load level from CSV file
 def load_level(level):
@@ -48,8 +50,8 @@ for y, row in enumerate(world_data):
             squares.append({
                 "x": x * TILE_SIZE,
                 "y": y * TILE_SIZE,
-                "dx": 5,
-                "dy": 5,
+                "dx": 3,
+                "dy": 3,
                 "color": SQUARE_COLORS[color_index],  # Assign color in pattern
                 "trail": [],
                 "dead": False,
@@ -66,7 +68,7 @@ finish_img = pygame.image.load("finish_line/finish.png")
 # Load skull image with transparency support
 skull_img = pygame.image.load("feature_imgs/skull.png")
 
-# Load overlay images for each square
+# Load overlay images for each square holding a knife
 overlay_images = {
     RED: pygame.image.load("square_knife/red_knife.png"),
     BLUE: pygame.image.load("square_knife/blue_knife.png"),
@@ -84,13 +86,17 @@ clock = pygame.time.Clock()
 
 # Load sound
 pygame.mixer.music.load("audio/instrumental_song.mp3")
-pygame.mixer.music.play()
-pygame.mixer.music.pause()
-playback_position = 0
-
+song = pygame.mixer.Sound("audio/instrumental_song.mp3")
 kill_sound = pygame.mixer.Sound("audio/kill_sound.mp3")
 
-# Game state variables
+# New music state variables
+music_paused = True
+last_collision_time = 0
+music_position = 0.0
+music_start_time = 0.0
+playback_position = 0
+
+# Game state variables (keep existing ones)
 is_colliding = False
 collision_timer = 0
 kill_powerup_active = [False] * len(squares)
@@ -104,6 +110,7 @@ def draw_world():
         for x, tile in enumerate(row):
             if tile == 1:  # Obstacle
                 pygame.draw.rect(screen, BLUE, (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+                pygame.draw.rect(screen, (0, 0, 0), (x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE), 1)  # Draw black border
             elif tile == 2:  # Kill power-up
                 screen.blit(kill_powerup_img, (x * TILE_SIZE, y * TILE_SIZE))
             elif tile == 3 or tile == 4:  # Teleporter
@@ -136,22 +143,19 @@ def draw_contrail(square):
 running = True
 while running:
     screen.fill(GREEN)
-
-    # Draw the world
     draw_world()
 
-    # Process each square
     for i, square in enumerate(squares):
-        if win_timer:  # Stop movement after a win
+        if win_timer:
             break
-
-        # Skip processing if the square is dead
         if square["dead"]:
             continue
 
-        # Update square position
+        # Update position with boundary clamping
         square["x"] += square["dx"]
         square["y"] += square["dy"]
+        square["x"] = max(0, min(WIDTH - SQUARE_SIZE, square["x"]))  # New boundary clamping
+        square["y"] = max(0, min(HEIGHT - SQUARE_SIZE, square["y"]))  # New boundary clamping
 
         # Add current position to the trail
         square["trail"].append((square["x"], square["y"]))
@@ -170,33 +174,73 @@ while running:
             square["dy"] = -square["dy"]
             pygame.mixer.music.unpause()
 
-        # Handle collisions with world objects
+        # Function to add a slight random angle change to the direction
+        def add_random_angle_change(dx, dy):
+            # Reduced angle variation for more predictable bounces
+            angle_change = random.uniform(-0.05, 0.05)  # Smaller range
+            speed = math.hypot(dx, dy)
+            new_dx = dx * math.cos(angle_change) - dy * math.sin(angle_change)
+            new_dy = dx * math.sin(angle_change) + dy * math.cos(angle_change)
+            # Maintain original speed
+            new_speed = math.hypot(new_dx, new_dy)
+            return (new_dx * speed/new_speed, new_dy * speed/new_speed)
+
+        # Collision handling with world objects
         for y, row in enumerate(world_data):
             for x, tile in enumerate(row):
                 obj_rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                square_rect = pygame.Rect(square["x"], square["y"], SQUARE_SIZE, SQUARE_SIZE)
 
                 if square_rect.colliderect(obj_rect):
+                    # In the obstacle collision handling section (tile == 1), REPLACE with:
                     if tile == 1:  # Obstacle
-                        overlap_x = min(square_rect.right - obj_rect.left, obj_rect.right - square_rect.left)
-                        overlap_y = min(square_rect.bottom - obj_rect.top, obj_rect.bottom - square_rect.top)
-                        if overlap_x < overlap_y:
-                            square["dx"] = -square["dx"]
-                            if square["dx"] > 0:
-                                square["x"] += overlap_x
+                        # Create rectangle for the square
+                        square_rect = pygame.Rect(square["x"], square["y"], SQUARE_SIZE, SQUARE_SIZE)
+                        
+                        # Check collision with current position
+                        if square_rect.colliderect(obj_rect):
+                            # Calculate overlap on both axes
+                            overlap_x = (square_rect.width + obj_rect.width)/2 - abs(square_rect.centerx - obj_rect.centerx)
+                            overlap_y = (square_rect.height + obj_rect.height)/2 - abs(square_rect.centery - obj_rect.centery)
+                            
+                            # Resolve collision along the axis of least penetration
+                            if overlap_x < overlap_y:
+                                # X-axis collision
+                                if square_rect.centerx < obj_rect.centerx:
+                                    square["x"] = obj_rect.left - SQUARE_SIZE
+                                else:
+                                    square["x"] = obj_rect.right
+                                square["dx"] = -square["dx"]
                             else:
-                                square["x"] -= overlap_x
-                        else:
-                            square["dy"] = -square["dy"]
-                            if square["dy"] > 0:
-                                square["y"] += overlap_y
-                            else:
-                                square["y"] -= overlap_y
+                                # Y-axis collision
+                                if square_rect.centery < obj_rect.centery:
+                                    square["y"] = obj_rect.top - SQUARE_SIZE
+                                else:
+                                    square["y"] = obj_rect.bottom
+                                square["dy"] = -square["dy"]
 
-                        if not is_colliding:
-                            pygame.mixer.music.unpause()
-                            pygame.mixer.music.play(start=playback_position)
-                            is_colliding = True
-                            collision_timer = time.time()
+                            # Add minimal random angle variation (max 5 degrees)
+                            angle = math.atan2(square["dy"], square["dx"])
+                            angle += random.uniform(-0.087, 0.087)  # ±5 degrees in radians
+                            
+                            # Maintain original speed
+                            speed = math.hypot(square["dx"], square["dy"])
+                            square["dx"] = math.cos(angle) * speed
+                            square["dy"] = math.sin(angle) * speed
+
+                            # Immediate position correction
+                            square["x"] = max(0, min(WIDTH - SQUARE_SIZE, square["x"]))
+                            square["y"] = max(0, min(HEIGHT - SQUARE_SIZE, square["y"]))
+
+                            # Force position update and re-check
+                            square_rect = pygame.Rect(square["x"], square["y"], SQUARE_SIZE, SQUARE_SIZE)
+                            if not square_rect.colliderect(obj_rect):
+                                # Only play sound if collision was properly resolved
+                                if not is_colliding:
+                                    pygame.mixer.music.unpause()
+                                    pygame.mixer.music.play(start=playback_position)
+                                    is_colliding = True
+                                    collision_timer = time.time()
 
                     elif tile == 2:  # Kill power-up
                         kill_powerup_active[i] = True
@@ -243,26 +287,28 @@ while running:
             if square["overlay"]:
                 screen.blit(square["overlay"], (square["x"], square["y"]))  # Draw the overlay image
             else:
-                pygame.draw.rect(screen, square["color"], square_rect)
+                # Draw main square with black border
+                pygame.draw.rect(screen, square["color"], square_rect)  # Inner color
+                pygame.draw.rect(screen, (0, 0, 0), square_rect, 1)  # Black border (1 pixel width)
 
     # Draw skulls for dead squares
     for x, y, color in dead_squares:
         pygame.draw.rect(screen, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))  # Draw the square's color
         screen.blit(skull_img, (x, y))  # Draw the skull image on top
 
-    # Stop the sound after 0.5 second if no collision is detected
-    if is_colliding and time.time() - collision_timer >= 0.3:
+    # Stop the sound after 0.7 second if no collision is detected
+    if is_colliding and time.time() - collision_timer >= 0.7:
         pygame.mixer.music.pause()
-        if playback_position >= 30:  # Restart playback position after 30 seconds (change as needed)
+        if playback_position >= song.get_length():  # Restart playback position after the song ends
             playback_position = 0
-        playback_position += 0.6  # Move to the next 0.5s segment
+        playback_position += 0.7  # Move to the next 0.7s segment
         is_colliding = False
         collision_timer = 0
 
     # Handle win logic
-    if win_timer:
+    if win_timer: 
         font = pygame.font.SysFont("Arial", 36)
-        win_text = font.render(f"Square {winning_square + 1} Wins!", True, WHITE)
+        win_text = font.render(f"{Square_Color_Names[winning_square]} Square Wins!", True, WHITE)
         screen.blit(win_text, (WIDTH // 2 - 100, HEIGHT // 2))
         if time.time() - win_timer > 5:
             running = False
